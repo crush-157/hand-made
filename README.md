@@ -1,6 +1,6 @@
 # hand-made
 
-This is an example to show how to add a local jar (i.e. not in a central Maven repository to a Java Fn function).
+This is an example to show how to add a local jar (i.e. not in a central Maven repository) to a Java Fn function.
 
 To do this you need to do a Docker Multi - Stage build.
 
@@ -21,7 +21,9 @@ There is an example `Dockerfile` for each of the two functions in the repository
 
 They are very similar, so let's walk through the [`Dockerfile`](./online-order/Dockerfile) for `online-order`:
 
-### Builder
+### Builder
+
+
 We need to run a Maven build, so start with:
 ```
 FROM maven as builder
@@ -109,17 +111,16 @@ Set the command to indicate the class and method that should be executed for the
 CMD ["com.example.fn.OnlineOrder::handleRequest"]
 ```
 
-## Change runtime to `docker`
+## Create a function
 You want Fn to build the function using your custom Dockerfile.
-To do this delete the file `func.yaml`.
-Then run `fn init`:
+To do this run `fn init`:
 ```
 $ fn init                                             [15:12:18]
 Dockerfile found. Using runtime 'docker'.
 func.yaml created.
 $ cat func.yaml                                       [15:13:12]
 schema_version: 20180708
-name: dummy
+name: online-order
 version: 0.0.1
 runtime: docker
 ```
@@ -127,81 +128,14 @@ runtime: docker
 Check that you can build from the Dockerfile:
 `fn build --verbose`
 
-## Customise the Dockerfile
-Now you need to customise the Dockerfile to include your local jar(s),
-and use them at build time and run time.
-
-In this example, we're going to add a jar `ice-cream-1.0-SNAPSHOT.jar`,
-which gives you prices for ice cream and allows you to order
-either by the cone from a Kiosk, or by the litre online.
-
-### Copy in your local jars
-
-Add the following the the Dockerfile in the build stage as step 4 :
-
-`COPY ice-cream-1.0-SNAPSHOT.jar local-jars/`
-
-### Install the local jars into the local Maven repository
-
-As step 5, add the following:
+## Deploy the function
+if `fn build --verbose` works, then run `fn deploy`, e.g.
 ```
-RUN mvn install:install-file -Dfile=local-jars/ice-cream-1.0-SNAPSHOT.jar \
-  -DgroupId=com.oracle.emeatechnology -DartifactId=icecream \
-  -Dversion=1.0 -Dpackaging=jar -DgeneratePom=true
-```
-
-### Change your `CMD`
-The Fn JDK image helpfully sets the `ENTRYPOINT`, so all you have to do is
-set the `CMD` as the last line of the `Dockerfile`, for example:
-
-`CMD ["com.example.fn.KioskOrder::handleRequest"]`
-
-### Review
-Your Dockerfile should now look like:
-```
-FROM fnproject/fn-java-fdk-build:jdk11-1.0.108 as build-stage
-WORKDIR /function
-ENV MAVEN_OPTS -Dhttp.proxyHost= -Dhttp.proxyPort= -Dhttps.proxyHost= -Dhttps.proxyPort= -Dhttp.nonProxyHosts= -Dmaven.repo.local=/usr/share/maven/ref/repository
-COPY ice-cream-1.0-SNAPSHOT.jar local-jars/
-RUN mvn install:install-file -Dfile=local-jars/ice-cream-1.0-SNAPSHOT.jar \
-  -DgroupId=com.oracle.emeatechnology -DartifactId=icecream \
-  -Dversion=1.0 -Dpackaging=jar -DgeneratePom=true
-ADD pom.xml /function/pom.xml
-RUN ["mvn", "package", "dependency:copy-dependencies", "-DincludeScope=runtime", "-DskipTests=true", "-Dmdep.prependGroupId=true",
-"-DoutputDirectory=target", "--fail-never"]
-ADD src /function/src
-RUN ["mvn", "package"]
-FROM fnproject/fn-java-fdk:jre11-1.0.108
-WORKDIR /function
-COPY --from=build-stage /function/target/*.jar /function/app/
-CMD ["com.example.fn.KioskOrder::handleRequest"]
-```
-
-## Customise the `pom.xml`
-For each of your local jars add a dependency to the `pom.xml` that matches
-what you specified in the Maven install command above.
-```
-<dependencies>
-    <!-- begin local-jars -->
-    <dependency>
-        <groupId>com.oracle.emeatechnology</groupId>
-        <artifactId>icecream</artifactId>
-        <version>1.0</version>
-    </dependency>
-    <!-- end local-jars -->
-```
-
-## Deploy
-Check `fn build --verbose` works.
-
-If it does, then run `fn deploy`, e.g.
-```
-fn deploy --app ice-cream
-$ fn invoke ice-cream kiosk-order < bubblegum.json
-6.25
+fn deploy --app hand-made
+$ fn invoke hand-made online-order < bubblegum.json
+14.3
 ```
 Sadly, you don't get an ice cream :-(
 
 ## Example
-For a working example, see the code in this repository (the `Dockerfile`
-has been edited to improve readability).
+For a working example, see the code in this repository.
